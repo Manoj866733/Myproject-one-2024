@@ -1,81 +1,71 @@
 pipeline {
-    agent any 
+    agent any
     
-    tools{
-        jdk 'jdk11'
+    tools {
+        jdk 'jdk17'
         maven 'maven3'
     }
     
     environment {
-        SCANNER_HOME=tool 'sonar-scanner'
+        SCANNER_HOME = tool 'sonar'
     }
+
+    stages {
+        stage('Git checkout') {
+            steps {
+                checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/Manoj866733/Myproject-one-2024.git']])
+            }
+        }
     
-    stages{
-        
-        stage("Git Checkout"){
-            steps{
-                git branch: 'main', changelog: false, poll: false, url: 'https://github.com/jaiswaladi246/Petclinic.git'
+        stage('compile') {
+            steps {
+                sh 'mvn clean compile'
             }
         }
-        
-        stage("Compile"){
-            steps{
-                sh "mvn clean compile"
-            }
-        }
-        
-         stage("Test Cases"){
-            steps{
-                sh "mvn test"
-            }
-        }
-        
-        stage("Sonarqube Analysis "){
-            steps{
-                withSonarQubeEnv('sonar-server') {
-                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Petclinic \
-                    -Dsonar.java.binaries=. \
-                    -Dsonar.projectKey=Petclinic '''
     
+        stage('Unittest') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+        
+        stage('SonarQube analysis') {
+            steps {
+                script {
+                    withSonarQubeEnv('sonar-server') {
+                        sh ''' 
+                            $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=myproject \
+                            -Dsonar.java.binaries=. \
+                            -Dsonar.projectKey=myproject 
+                        '''
+                    }
                 }
             }
         }
-        
-        stage("OWASP Dependency Check"){
-            steps{
-                dependencyCheck additionalArguments: '--scan ./ --format HTML ', odcInstallation: 'DP'
-                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-            }
-        }
-        
-         stage("Build"){
-            steps{
-                sh " mvn clean install"
+    
+        stage('Package with Maven') {
+            steps {
+                sh 'mvn clean install'
             }
         }
         
         stage("Docker Build & Push"){
             steps{
                 script{
-                   withDockerRegistry(credentialsId: '58be877c-9294-410e-98ee-6a959d73b352', toolName: 'docker') {
-                        
-                        sh "docker build -t image1 ."
-                        sh "docker tag image1 adijaiswal/pet-clinic123:latest "
-                        sh "docker push adijaiswal/pet-clinic123:latest "
+                   withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+                        sh "docker build -t myproject ."
+                        sh "docker tag myproject 866733/projectone:v1 "
+                        sh "docker push 866733/projectone:v1 "
                     }
                 }
             }
         }
         
-        stage("TRIVY"){
-            steps{
-                sh " trivy image adijaiswal/pet-clinic123:latest"
-            }
-        }
-        
-        stage("Deploy To Tomcat"){
-            steps{
-                sh "cp  /var/lib/jenkins/workspace/CI-CD/target/petclinic.war /opt/apache-tomcat-9.0.65/webapps/ "
+        stage('Copy WAR to Tomcat') {
+            steps {
+                script {
+                    sh "cp  /var/lib/jenkins/workspace/myporject/target/petclinic.war /opt/apache-tomcat-9.0.80/webapps/ "
+                }
             }
         }
     }
